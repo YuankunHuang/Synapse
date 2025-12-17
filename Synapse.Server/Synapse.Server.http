@@ -1,0 +1,6 @@
+@Synapse.Server_HostAddress = http://localhost:5241
+
+GET {{Synapse.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

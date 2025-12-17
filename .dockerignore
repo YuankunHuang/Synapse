@@ -1,0 +1,12 @@
+**/.dockerignore
+**/.env
+**/.git
+**/.gitignore
+**/.vs
+**/bin
+**/obj
+**/Builds
+**/Library
+**/TestResults
+docker-compose.yml
+docker-compose.override.yml
