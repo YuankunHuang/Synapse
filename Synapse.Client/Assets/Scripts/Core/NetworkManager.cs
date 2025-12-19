@@ -1,4 +1,5 @@
 using System;
+using Google.Protobuf;
 using Microsoft.AspNetCore.SignalR.Client;
 using UnityEngine;
 using Synapse.Shared.Protocol;
@@ -22,7 +23,7 @@ namespace Synapse.Client.Core
                 .Build();
             
             // 2. listen to server
-            _connection.On<byte[]>("ReceiveMessage", data =>
+            _connection.On<byte[]>("ReceiveWorldState", data =>
             {
                 try
                 {
@@ -40,10 +41,34 @@ namespace Synapse.Client.Core
             {
                 await _connection.StartAsync();
                 Debug.Log($"[Client] Connection Successful!");
+
+                MonoBehaviourUtil.Instance.StartCoroutine(SimulateMovementLoop());
             }
             catch (Exception e)
             {
                 Debug.LogError($"[Client] Connection Failed: {e.Message}");
+            }
+        }
+
+        private System.Collections.IEnumerator SimulateMovementLoop()
+        {
+            while (true)
+            {
+                if (_connection.State == HubConnectionState.Connected)
+                {
+                    var currentState = new PlayerState()
+                    {
+                        Id = _connection.ConnectionId,
+                        Position = new Vec3()
+                        {
+                            X = UnityEngine.Random.Range(0, 10f),
+                            Y = 0,
+                            Z = UnityEngine.Random.Range(0, 10f)
+                        }
+                    };
+                    _connection.InvokeAsync("SyncPosition", currentState.ToByteArray());
+                    yield return new WaitForSeconds(0.1f);
+                }
             }
         }
 
