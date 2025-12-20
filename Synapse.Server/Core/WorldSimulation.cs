@@ -9,7 +9,7 @@ public class WorldSimulation
     public ConcurrentDictionary<string, PlayerState> Players { get; } = new();
     
     // grid data
-    public SpatialGrid Grid { get; } = new SpatialGrid();
+    public SpatialGrid Grid { get; } = new();
 
     public void MovePlayer(string connectionId, Vec3 pos)
     {

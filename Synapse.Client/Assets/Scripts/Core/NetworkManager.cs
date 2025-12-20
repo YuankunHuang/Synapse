@@ -8,6 +8,8 @@ namespace Synapse.Client.Core
 {
     public class NetworkManager : ICoreManager
     {
+        public string ConnectionId => _connection?.ConnectionId ?? string.Empty;
+        
         private HubConnection _connection;
 
         private string _serverUrl = "http://localhost:5241/gamehub";
@@ -28,7 +30,8 @@ namespace Synapse.Client.Core
                 try
                 {
                     var worldState = WorldState.Parser.ParseFrom(data);
-                    Debug.Log($"[SignalR] Received state. ServerTime: {worldState.ServerTime} | PlayerCount: {worldState.Players.Count}");
+                    EventBus.Publish(EventKeys.WorldStateUpdate, worldState);
+                    Debug.Log($"[SignalR] ReceiveWorldState. ServerTime: {worldState.ServerTime} | PlayerCount: {worldState.Players.Count}");
                 }
                 catch (Exception e)
                 {
@@ -41,7 +44,6 @@ namespace Synapse.Client.Core
             {
                 await _connection.StartAsync();
                 Debug.Log($"[Client] Connection Successful!");
-
                 MonoBehaviourUtil.Instance.StartCoroutine(SimulateMovementLoop());
             }
             catch (Exception e)
@@ -56,19 +58,36 @@ namespace Synapse.Client.Core
             {
                 if (_connection.State == HubConnectionState.Connected)
                 {
-                    var currentState = new PlayerState()
+                    if (!string.IsNullOrEmpty(_connection.ConnectionId))
                     {
-                        Id = _connection.ConnectionId,
-                        Position = new Vec3()
+                        var deltaX = 0f;
+                        var deltaZ = 0f;
+                        
+                        // test moving self with input
+                        if (Input.GetAxisRaw("Horizontal") != 0 || Input.GetAxisRaw("Vertical") != 0)
                         {
-                            X = UnityEngine.Random.Range(0, 10f),
-                            Y = 0,
-                            Z = UnityEngine.Random.Range(0, 10f)
+                            deltaX = Input.GetAxisRaw("Horizontal") * Time.deltaTime * 100;
+                            deltaZ = Input.GetAxisRaw("Vertical") * Time.deltaTime * 100;
                         }
-                    };
-                    _connection.InvokeAsync("SyncPosition", currentState.ToByteArray());
-                    yield return new WaitForSeconds(0.1f);
+                        
+                        // keep polling
+                        EventBus.Publish<(string, Action<PlayerState>)>(EventKeys.GetPlayerState, (_connection.ConnectionId, state =>
+                        {
+                            if (state != null)
+                            {
+                                state.Position = new Vec3()
+                                {
+                                    X = state.Position.X + deltaX,
+                                    Y = state.Position.Y,
+                                    Z = state.Position.Z + deltaZ
+                                };
+                                _connection.InvokeAsync("SyncPosition", state.ToByteArray());
+                            }
+                        }));  
+                    }
                 }
+
+                yield return null;
             }
         }
 

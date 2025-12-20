@@ -44,24 +44,31 @@ public class GameHub : Hub
     /// Called by client to update player data.
     /// </summary>
     /// <param name="data"></param>
-    public async void SyncPosition(byte[] data)
+    public async Task SyncPosition(byte[] data)
     {
         try
         {
             // update the client itself
             var state = PlayerState.Parser.ParseFrom(data);
-            _world.MovePlayer(state.Id, state.Position);
+            var connectionId = Context.ConnectionId;
+            state.Id = connectionId;
+            _world.MovePlayer(connectionId, state.Position); // cannot use state.Id (from the user, not trustworthy)
 
             // broadcast to observers
             var nearbyIds = _world.Grid.GetObservers(state.Position);
-
+            
             // responses (to all observers)
             var response = new WorldState();
-            response.Players.Add(_world.Players[Context.ConnectionId]);
             response.ServerTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            foreach (var nearbyId in nearbyIds)
+            {
+                if (_world.Players.TryGetValue(nearbyId, out var playerState))
+                {
+                    response.Players.Add(playerState);
+                }
+            }
 
             var responseBytes = response.ToByteArray();
-
             await Clients.Clients(nearbyIds).SendAsync("ReceiveWorldState", responseBytes);
         }
         catch (Exception e)

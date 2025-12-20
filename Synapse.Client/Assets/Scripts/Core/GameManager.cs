@@ -7,9 +7,11 @@ namespace Synapse.Client.Core
     public class GameManager : MonoBehaviour
     {
         [SerializeField] private UIRoot _uiRoot;
+        [SerializeField] private WorldRoot _worldRoot;
         
         private NetworkManager _networkManager;
         private UIManager _uiManager;
+        private WorldManager _worldManager;
         
         private void OnEnable()
         {
@@ -27,6 +29,10 @@ namespace Synapse.Client.Core
             _uiManager = new UIManager(_uiRoot);
             _uiManager.Init();
             ModuleRegistry.Register(_uiManager);
+            
+            _worldManager = new WorldManager(_worldRoot);
+            _worldManager.Init();
+            ModuleRegistry.Register(_worldManager);
 
             EventBus.Publish(EventKeys.GameInitialized);
         }
@@ -35,11 +41,14 @@ namespace Synapse.Client.Core
         {
             ModuleRegistry.Unregister<NetworkManager>();
             ModuleRegistry.Unregister<UIManager>();
+            ModuleRegistry.Unregister<WorldManager>();
             
             _networkManager.Dispose();
             _networkManager = null;
             _uiManager.Dispose();
             _uiManager = null;
+            _worldManager.Dispose();
+            _worldManager = null;
         }
     }
 }

@@ -5,21 +5,21 @@ namespace Synapse.Server;
 
 public class SpatialGrid
 {
-    private const int CellSize = 50;
+    private const int CellSize = 5;
 
     private readonly ConcurrentDictionary<(int, int), HashSet<string>> _grid = new();
     private readonly ConcurrentDictionary<string, (int, int)> _playerCells = new();
 
     private readonly object _lock = new object();
 
-    private (int, int) GetCell(float x, float y)
+    private (int, int) GetCell(float x, float z)
     {
-        return ((int)Math.Floor(x / CellSize), (int)Math.Floor(y / CellSize));
+        return ((int)Math.Floor(x / CellSize), (int)Math.Floor(z / CellSize));
     }
 
     public void UpdateObject(string id, Vec3 pos)
     {
-        var newCell = GetCell(pos.X, pos.Y);
+        var newCell = GetCell(pos.X, pos.Z);
         if (_playerCells.TryGetValue(id, out var oldCell) && oldCell == newCell)
         {
             return;
