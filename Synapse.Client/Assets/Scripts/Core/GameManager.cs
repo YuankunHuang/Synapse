@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using Synapse.Client.UI;
+using YuankunHuang.Unity.SimpleObjectPool;
 
 namespace Synapse.Client.Core
 {
@@ -39,6 +40,8 @@ namespace Synapse.Client.Core
 
         private void OnDisable()
         {
+            PoolService.ClearAll();
+            
             ModuleRegistry.Unregister<NetworkManager>();
             ModuleRegistry.Unregister<UIManager>();
             ModuleRegistry.Unregister<WorldManager>();

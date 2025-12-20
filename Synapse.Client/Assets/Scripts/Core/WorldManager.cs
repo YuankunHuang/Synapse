@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Synapse.Client.Game;
 using Synapse.Shared.Protocol;
 using UnityEngine;
+using Synapse.Client.UI;
+using YuankunHuang.Unity.SimpleObjectPool;
 
 namespace Synapse.Client.Core
 {
@@ -83,7 +85,7 @@ namespace Synapse.Client.Core
             var targetRot = state.Rotation != null
                 ? Quaternion.Euler(state.Rotation.X, state.Rotation.Y, state.Rotation.Z)
                 : Quaternion.identity;
-
+            
             player.Transform.position = isNew
                 ? targetPos
                 : Vector3.Lerp(player.Transform.position, targetPos, 10 * Time.deltaTime);
@@ -98,7 +100,7 @@ namespace Synapse.Client.Core
 
             if (!_players.TryGetValue(id, out var player))
             {
-                var cfg = GameObject.Instantiate(_worldRoot.PlayerPrefab, _worldRoot.PlayerRoot).GetComponent<PlayerConfig>();
+                var cfg = PoolService.Get<PlayerConfig>(_worldRoot.PlayerPrefab, Vector3.zero,  Quaternion.identity, _worldRoot.PlayerRoot);
                 player = new PlayerController(cfg, id);
                 _players[id] = player;
                 isNew = true;
@@ -111,7 +113,7 @@ namespace Synapse.Client.Core
         {
             if (_players.TryGetValue(id, out var p))
             {
-                GameObject.Destroy(p.Transform.gameObject);
+                PoolService.Release(p.Transform.gameObject);
                 _players.Remove(id);
             }
         }

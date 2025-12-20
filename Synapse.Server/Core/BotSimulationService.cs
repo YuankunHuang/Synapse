@@ -6,7 +6,8 @@ namespace Synapse.Server;
 public class BotSimulationService : BackgroundService
 {
     private readonly WorldSimulation _world;
-    private readonly int _botCount = 500;
+    private readonly int _botCount = 1000;
+    private readonly int _botAreaSize = 200;
     private readonly List<BotAgent> _bots = new();
 
     public BotSimulationService(WorldSimulation world)
@@ -19,8 +20,8 @@ public class BotSimulationService : BackgroundService
             _bots.Add(new BotAgent()
             {
                 Id = $"bot_{i + 1}",
-                X = Random.Shared.NextSingle() * 100 - 50,
-                Z = Random.Shared.NextSingle() * 100 - 50,
+                X = Random.Shared.NextSingle() * _botAreaSize - _botAreaSize / 2,
+                Z = Random.Shared.NextSingle() * _botAreaSize - _botAreaSize / 2,
                 Angle = Random.Shared.NextSingle() * MathF.PI * 2,
             });
         }
@@ -44,6 +45,7 @@ public class BotSimulationService : BackgroundService
                 _world.MovePlayer(bot.Id, new Vec3()
                 {
                     X = bot.X,
+                    Y = 0,
                     Z = bot.Z,
                 });
             }

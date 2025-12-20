@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Synapse.Client.Core
+namespace Synapse.Client.UI
 {
     public class WorldRoot : MonoBehaviour
     {

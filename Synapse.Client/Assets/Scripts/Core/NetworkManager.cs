@@ -31,7 +31,7 @@ namespace Synapse.Client.Core
                 {
                     var worldState = WorldState.Parser.ParseFrom(data);
                     EventBus.Publish(EventKeys.WorldStateUpdate, worldState);
-                    Debug.Log($"[SignalR] ReceiveWorldState. ServerTime: {worldState.ServerTime} | PlayerCount: {worldState.Players.Count}");
+                    // Debug.Log($"[SignalR] ReceiveWorldState. ServerTime: {worldState.ServerTime} | PlayerCount: {worldState.Players.Count}");
                 }
                 catch (Exception e)
                 {

@@ -17,7 +17,7 @@ namespace Synapse.Client.Game
             _isSelf = ModuleRegistry.Get<NetworkManager>().ConnectionId == id;
             _config.MeshRendererTorso.sharedMaterial = _isSelf
                 ? _config.MatSelfTorso
-                : config.MatOtherTorso;
+                : _config.MatOtherTorso;
         }
     }
 }
