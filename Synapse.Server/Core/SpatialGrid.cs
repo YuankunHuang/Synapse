@@ -5,7 +5,7 @@ namespace Synapse.Server;
 
 public class SpatialGrid
 {
-    private const int CellSize = 5;
+    private const int CellSize = 10;
 
     private readonly ConcurrentDictionary<(int, int), HashSet<string>> _grid = new();
     private readonly ConcurrentDictionary<string, (int, int)> _playerCells = new();

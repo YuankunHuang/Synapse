@@ -1,4 +1,5 @@
 using Synapse.Client.Core;
+using Synapse.Client.Core.Network;
 using UnityEngine;
 
 namespace Synapse.Client.Game
@@ -14,7 +15,7 @@ namespace Synapse.Client.Game
         {
             _config = config;
 
-            _isSelf = ModuleRegistry.Get<NetworkManager>().ConnectionId == id;
+            _isSelf = ModuleRegistry.Get<INetworkManager>().ConnectionId == id;
             _config.MeshRendererTorso.sharedMaterial = _isSelf
                 ? _config.MatSelfTorso
                 : _config.MatOtherTorso;

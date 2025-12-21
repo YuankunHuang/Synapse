@@ -6,9 +6,9 @@ using UnityEngine;
 using Synapse.Client.UI;
 using YuankunHuang.Unity.SimpleObjectPool;
 
-namespace Synapse.Client.Core
+namespace Synapse.Client.Core.World
 {
-    public class WorldManager : ICoreManager
+    public class WorldManager : IWorldManager
     {
         private WorldRoot _worldRoot;
 

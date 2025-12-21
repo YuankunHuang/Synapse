@@ -6,6 +6,7 @@
 [Oo]bj/
 .config/
 .fake/
+Demo/
 
 # Visual Studio / Rider
 .vs/

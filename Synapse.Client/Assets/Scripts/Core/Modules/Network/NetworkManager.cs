@@ -4,11 +4,17 @@ using Microsoft.AspNetCore.SignalR.Client;
 using UnityEngine;
 using Synapse.Shared.Protocol;
 
-namespace Synapse.Client.Core
+namespace Synapse.Client.Core.Network
 {
-    public class NetworkManager : ICoreManager
+    public class NetworkManager : INetworkManager
     {
         public string ConnectionId => _connection?.ConnectionId ?? string.Empty;
+
+        private long _lastPing;
+        private int _bytesPerSec;
+        private int _bytesReceivedThisSec;
+        private float _lastByteCheckTime;
+        private bool _isConnectionInitialized;
         
         private HubConnection _connection;
 
@@ -30,6 +36,26 @@ namespace Synapse.Client.Core
                 try
                 {
                     var worldState = WorldState.Parser.ParseFrom(data);
+                    
+                    // Time can only be accessed from main thread
+                    MonoBehaviourUtil.Instance.RunOnMainThread(() =>
+                    {
+                        // stats
+                        // 1. bytes per sec
+                        _bytesReceivedThisSec += data.Length;
+                        if (Time.time - _lastByteCheckTime >= 1f)
+                        {
+                            _bytesPerSec = _bytesReceivedThisSec;
+                            _bytesReceivedThisSec = 0;
+                            _lastByteCheckTime = Time.time;
+                            EventBus.Publish(EventKeys.NetworkBandwidthUpdated, _bytesPerSec);
+                        }
+                        // 2. ping
+                        var lag = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - worldState.ServerTime;
+                        _lastPing = lag > 0 ? lag : 0;
+                        EventBus.Publish(EventKeys.NetworkPingUpdated, _lastPing);
+                    });
+
                     EventBus.Publish(EventKeys.WorldStateUpdate, worldState);
                     // Debug.Log($"[SignalR] ReceiveWorldState. ServerTime: {worldState.ServerTime} | PlayerCount: {worldState.Players.Count}");
                 }
@@ -42,7 +68,9 @@ namespace Synapse.Client.Core
             // 3. start connection
             try
             {
+                _isConnectionInitialized = false;
                 await _connection.StartAsync();
+                
                 Debug.Log($"[Client] Connection Successful!");
                 MonoBehaviourUtil.Instance.StartCoroutine(SimulateMovementLoop());
             }
@@ -50,6 +78,8 @@ namespace Synapse.Client.Core
             {
                 Debug.LogError($"[Client] Connection Failed: {e.Message}");
             }
+
+            MonoBehaviourUtil.OnUpdate += OnUpdate;
         }
 
         private System.Collections.IEnumerator SimulateMovementLoop()
@@ -93,10 +123,24 @@ namespace Synapse.Client.Core
 
         public async void Dispose()
         {
+            MonoBehaviourUtil.OnUpdate -= OnUpdate;
+            
             if (_connection != null)
             {
                 await _connection.StopAsync();
                 await _connection.DisposeAsync();
+            }
+        }
+
+        private void OnUpdate()
+        {
+            if (!_isConnectionInitialized)
+            {
+                if (!string.IsNullOrEmpty(ConnectionId))
+                {
+                    _isConnectionInitialized = true;
+                    EventBus.Publish(EventKeys.NetworkConnectionInitialized, ConnectionId);
+                }
             }
         }
     }

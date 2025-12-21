@@ -6,6 +6,9 @@ namespace Synapse.Client.Core
         public static readonly int WorldStateUpdate = GetNewKey();
         public static readonly int GameInitialized = GetNewKey();
         public static readonly int GetPlayerState = GetNewKey();
+        public static readonly int NetworkPingUpdated = GetNewKey();
+        public static readonly int NetworkBandwidthUpdated = GetNewKey();
+        public static readonly int NetworkConnectionInitialized = GetNewKey();
         
         public static int GetNewKey()
         {

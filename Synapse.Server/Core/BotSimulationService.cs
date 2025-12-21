@@ -20,8 +20,8 @@ public class BotSimulationService : BackgroundService
             _bots.Add(new BotAgent()
             {
                 Id = $"bot_{i + 1}",
-                X = Random.Shared.NextSingle() * _botAreaSize - _botAreaSize / 2,
-                Z = Random.Shared.NextSingle() * _botAreaSize - _botAreaSize / 2,
+                X = Random.Shared.NextSingle() * _botAreaSize,
+                Z = Random.Shared.NextSingle() * _botAreaSize,
                 Angle = Random.Shared.NextSingle() * MathF.PI * 2,
             });
         }

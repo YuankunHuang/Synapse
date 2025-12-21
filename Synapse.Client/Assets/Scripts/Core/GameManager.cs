@@ -1,4 +1,7 @@
 using System;
+using Synapse.Client.Core.Network;
+using Synapse.Client.Core.UI;
+using Synapse.Client.Core.World;
 using UnityEngine;
 using Synapse.Client.UI;
 using YuankunHuang.Unity.SimpleObjectPool;
@@ -10,9 +13,9 @@ namespace Synapse.Client.Core
         [SerializeField] private UIRoot _uiRoot;
         [SerializeField] private WorldRoot _worldRoot;
         
-        private NetworkManager _networkManager;
-        private UIManager _uiManager;
-        private WorldManager _worldManager;
+        private INetworkManager _networkManager;
+        private IUIManager _uiManager;
+        private IWorldManager _worldManager;
         
         private void OnEnable()
         {
