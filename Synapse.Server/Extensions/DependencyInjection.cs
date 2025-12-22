@@ -8,4 +8,19 @@ public static class DependencyInjection
         // services.AddHostedService<BotSimulationService>();
         return services;
     }
+
+    public static IServiceCollection AddWebServices(this IServiceCollection services)
+    {
+        services.AddEndpointsApiExplorer();
+        services.AddSwaggerGen();
+        
+        services.AddSignalR(options =>
+        {
+            options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
+            options.EnableDetailedErrors = true;
+        });
+        services.AddControllers();
+        
+        return services;
+    }
 }

@@ -19,3 +19,12 @@ message WorldState {
     repeated PlayerState players = 1;
     int64 server_time = 2;
 }
+
+message BotMoveData {
+    string id = 1;
+    Vec3 position = 2;
+}
+
+message BotMoveBatch {
+    repeated BotMoveData bots = 1;
+}

@@ -1,3 +1,5 @@
 signalrcore
 asyncio
 requests
+protobuf
+grpcio_tools

@@ -5,14 +5,6 @@ using Synapse.Shared.Protocol;
 
 namespace Synapse.Server.Hubs;
 
-public struct BotMoveData
-{
-    public string Id { get; set; }
-    public float X { get; set; }
-    public float Y { get; set; }
-    public float Z { get; set; }
-}
-
 public class GameHub : Hub
 {
     private WorldSimulation _world;
@@ -84,11 +76,14 @@ public class GameHub : Hub
     /// <summary>
     /// Called by client to update bot data.
     /// </summary>
-    public async Task SyncBotPosition(IEnumerable<BotMoveData> bots)
+    public async Task SyncBotPosition(byte[] data)
     {
         try
         {
             var connId = Context.ConnectionId;
+            
+            var botMoveBatch = BotMoveBatch.Parser.ParseFrom(data);
+            var bots = botMoveBatch.Bots;
             
             _botOwners.AddOrUpdate(connId, _ => new HashSet<string>(bots.Select(b => b.Id)), 
                 (_, set) =>
@@ -105,7 +100,7 @@ public class GameHub : Hub
 
             foreach (var bot in bots)
             {
-                var pos = new Vec3 {X = bot.X, Y = bot.Y, Z = bot.Z};
+                var pos = bot.Position;
                 _world.MovePlayer(bot.Id, pos);
                 
                 var observers = _world.Grid.GetObservers(pos);

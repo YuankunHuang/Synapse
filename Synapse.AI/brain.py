@@ -4,8 +4,11 @@ import time
 import math
 import random
 import threading
+import base64
 from dataclasses import dataclass
 from signalrcore.hub_connection_builder import HubConnectionBuilder
+
+import game_pb2
 
 handler = logging.StreamHandler()
 handler.setLevel(logging.DEBUG)
@@ -46,7 +49,7 @@ class BotManager:
     def connect(self):
         self.conn = HubConnectionBuilder()\
             .with_url(server_url)\
-            .configure_logging(logging.ERROR)\
+            .configure_logging(logging.DEBUG)\
             .with_automatic_reconnect({
                 "type": "raw",
                 "keep_alive_interval": 10,
@@ -97,31 +100,22 @@ class BotManager:
         if not self.connected_evt.is_set():
             return
 
-        all_bots = [{
-            "Id": b.bot_id,
-            "X": b.x,
-            "Y": 0.0,
-            "Z": b.z
-        } for b in self.bots]
+        batch = game_pb2.BotMoveBatch()
 
-        # the entire payload tends to be too large to send
-        # needs to be chunked
-        current_chunk = []
-        current_size = 0
-        MAX_BYTES = 30000
-        for bot in all_bots:
-            item_size = len(str(bot)) + 2
-            if current_size + item_size >= MAX_BYTES:
-                # will exceed upper limit, send immediately & reset
-                self.conn.send("SyncBotPosition", [current_chunk])
-                current_chunk = []
-                current_size = 0
-            current_chunk.append(bot)
-            current_size += item_size
-        
-        if current_chunk:
-            self.conn.send("SyncBotPosition", [current_chunk])
+        for b in self.bots:
+            bot_data = batch.bots.add()
+            bot_data.id = b.bot_id
+            bot_data.position.x = b.x
+            bot_data.position.y = 0.0
+            bot_data.position.z = b.z
 
+        payload = batch.SerializeToString()
+        payload_b64 = base64.b64encode(payload)
+        payload_final = payload_b64.decode('ascii')
+        try:
+            self.conn.send("SyncBotPosition", [payload_final])
+        except Exception as e:
+            print(f"[Sync Error] {e}")
 
     def run(self, tick_hz = 10, sync_hz = 10):
         tick_dt = 1.0 / tick_hz
