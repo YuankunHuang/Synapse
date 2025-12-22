@@ -15,11 +15,16 @@ namespace Synapse.Client.Core.Network
         private int _bytesReceivedThisSec;
         private float _lastByteCheckTime;
         private bool _isConnectionInitialized;
+
+        private int _movementSpeed = 70;
+        private int _syncHz = 10;
+        private float _lastSyncTime;
+        private PlayerState _cachedLocalState;
         
         private HubConnection _connection;
 
         private string _serverUrl = "http://localhost:5241/gamehub";
-        
+
         public async void Init()
         {
             Debug.Log($"[Client] Connecting to {_serverUrl}...");
@@ -29,14 +34,14 @@ namespace Synapse.Client.Core.Network
                 .WithUrl(_serverUrl)
                 .WithAutomaticReconnect()
                 .Build();
-            
+
             // 2. listen to server
             _connection.On<byte[]>("ReceiveWorldState", data =>
             {
                 try
                 {
                     var worldState = WorldState.Parser.ParseFrom(data);
-                    
+
                     // Time can only be accessed from main thread
                     MonoBehaviourUtil.Instance.RunOnMainThread(() =>
                     {
@@ -50,6 +55,7 @@ namespace Synapse.Client.Core.Network
                             _lastByteCheckTime = Time.time;
                             EventBus.Publish(EventKeys.NetworkBandwidthUpdated, _bytesPerSec);
                         }
+
                         // 2. ping
                         var lag = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - worldState.ServerTime;
                         _lastPing = lag > 0 ? lag : 0;
@@ -64,15 +70,14 @@ namespace Synapse.Client.Core.Network
                     Debug.LogError($"Parse Error: {e.Message}");
                 }
             });
-            
+
             // 3. start connection
             try
             {
                 _isConnectionInitialized = false;
                 await _connection.StartAsync();
-                
+
                 Debug.Log($"[Client] Connection Successful!");
-                MonoBehaviourUtil.Instance.StartCoroutine(SimulateMovementLoop());
             }
             catch (Exception e)
             {
@@ -82,49 +87,10 @@ namespace Synapse.Client.Core.Network
             MonoBehaviourUtil.OnUpdate += OnUpdate;
         }
 
-        private System.Collections.IEnumerator SimulateMovementLoop()
-        {
-            while (true)
-            {
-                if (_connection.State == HubConnectionState.Connected)
-                {
-                    if (!string.IsNullOrEmpty(_connection.ConnectionId))
-                    {
-                        var deltaX = 0f;
-                        var deltaZ = 0f;
-                        
-                        // test moving self with input
-                        if (Input.GetAxisRaw("Horizontal") != 0 || Input.GetAxisRaw("Vertical") != 0)
-                        {
-                            deltaX = Input.GetAxisRaw("Horizontal") * Time.deltaTime * 100;
-                            deltaZ = Input.GetAxisRaw("Vertical") * Time.deltaTime * 100;
-                        }
-                        
-                        // keep polling
-                        EventBus.Publish<(string, Action<PlayerState>)>(EventKeys.GetPlayerState, (_connection.ConnectionId, state =>
-                        {
-                            if (state != null)
-                            {
-                                state.Position = new Vec3()
-                                {
-                                    X = state.Position.X + deltaX,
-                                    Y = state.Position.Y,
-                                    Z = state.Position.Z + deltaZ
-                                };
-                                _connection.InvokeAsync("SyncPosition", state.ToByteArray());
-                            }
-                        }));  
-                    }
-                }
-
-                yield return null;
-            }
-        }
-
         public async void Dispose()
         {
             MonoBehaviourUtil.OnUpdate -= OnUpdate;
-            
+
             if (_connection != null)
             {
                 await _connection.StopAsync();
@@ -134,12 +100,50 @@ namespace Synapse.Client.Core.Network
 
         private void OnUpdate()
         {
+            // monitor initialization state
             if (!_isConnectionInitialized)
             {
                 if (!string.IsNullOrEmpty(ConnectionId))
                 {
                     _isConnectionInitialized = true;
                     EventBus.Publish(EventKeys.NetworkConnectionInitialized, ConnectionId);
+                    
+                    _cachedLocalState = new PlayerState()
+                    {
+                        Id = ConnectionId,
+                        Position = new Vec3() {X = 0, Y = 0, Z = 0},
+                    };
+                    
+                    EventBus.Publish(EventKeys.PlayerStateUpdate, _cachedLocalState);
+                    _lastSyncTime = Time.time;
+                    _connection.InvokeAsync("SyncPosition", _cachedLocalState.ToByteArray());
+                }
+            }
+
+            // movement tick
+            if (_connection.State == HubConnectionState.Connected)
+            {
+                if (!string.IsNullOrEmpty(_connection.ConnectionId))
+                {
+                    var h = Input.GetAxisRaw("Horizontal");
+                    var v = Input.GetAxisRaw("Vertical");
+                    if (h != 0 || v != 0)
+                    {
+                        var deltaX = h * Time.deltaTime * _movementSpeed;
+                        var deltaZ = v * Time.deltaTime * _movementSpeed;
+                        _cachedLocalState.Position.X += deltaX;
+                        _cachedLocalState.Position.Z += deltaZ;
+                        
+                        // update self (!!! server won't send back our own movement data package to ourselves)
+                        // Otherwise it'll cause rollbacks.
+                        EventBus.Publish(EventKeys.PlayerStateUpdate, _cachedLocalState);
+                        
+                        if (Time.time - _lastSyncTime >= 1f / _syncHz)
+                        {
+                            _lastSyncTime = Time.time;
+                            _connection.InvokeAsync("SyncPosition", _cachedLocalState.ToByteArray());
+                        }
+                    }
                 }
             }
         }

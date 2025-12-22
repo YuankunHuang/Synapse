@@ -60,8 +60,9 @@ namespace Synapse.Client.Core
         {
             if (_listeners.TryGetValue(eventId, out var listeners))
             {
-                foreach (var del in listeners.ToArray())
+                for (var i = 0; i < listeners.Count; ++i)
                 {
+                    var del = listeners[i];
                     if (del is Action action)
                     {
                         action.Invoke();
@@ -74,8 +75,9 @@ namespace Synapse.Client.Core
         {
             if (_listeners.TryGetValue(eventId, out var listeners))
             {
-                foreach (var del in listeners.ToArray())
+                for (var i = 0; i < listeners.Count; ++i)
                 {
+                    var del = listeners[i];
                     if (del is Action<T> action)
                     {
                         action.Invoke(data);

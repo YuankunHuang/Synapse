@@ -11,8 +11,14 @@ namespace Synapse.Client.Core.World
     public class WorldManager : IWorldManager
     {
         private WorldRoot _worldRoot;
+        private string _localPlayerId;
 
         private Dictionary<string, PlayerController> _players;
+
+        // expired player cleanup
+        private const float PLAYER_TTL_SEC = .5f;
+        private const float CLEANUP_PERIOD_SEC = 1f;
+        private float _lastCleanupTime;
 
         public WorldManager(WorldRoot worldRoot)
         {
@@ -22,14 +28,55 @@ namespace Synapse.Client.Core.World
 
         public void Init()
         {
+            EventBus.Subscribe<string>(EventKeys.NetworkConnectionInitialized, OnNetworkConnectionInitialized);
             EventBus.Subscribe<WorldState>(EventKeys.WorldStateUpdate, OnWorldStateUpdate);
+            EventBus.Subscribe<PlayerState>(EventKeys.PlayerStateUpdate, OnPlayerStateUpdate);
             EventBus.Subscribe<(string, Action<PlayerState>)>(EventKeys.GetPlayerState, OnGetPlayerState);
+
+            MonoBehaviourUtil.OnUpdate += OnUpdate;
         }
 
         public void Dispose()
         {
+            EventBus.Unsubscribe<string>(EventKeys.NetworkConnectionInitialized, OnNetworkConnectionInitialized);
             EventBus.Unsubscribe<WorldState>(EventKeys.WorldStateUpdate, OnWorldStateUpdate);
+            EventBus.Unsubscribe<PlayerState>(EventKeys.PlayerStateUpdate, OnPlayerStateUpdate);
             EventBus.Unsubscribe<(string, Action<PlayerState>)>(EventKeys.GetPlayerState, OnGetPlayerState);
+            
+            MonoBehaviourUtil.OnUpdate -= OnUpdate;
+        }
+        
+        private void CleanupExpiredPlayers()
+        {
+            var idsToRemove = new List<string>();
+            foreach (var kv in _players)
+            {
+                var id = kv.Key;
+                if (id == _localPlayerId)
+                {
+                    continue; // never remove local player
+                }   
+
+                var player = kv.Value;
+                if (Time.time - player.LastUpdateTime > PLAYER_TTL_SEC)
+                {
+                    idsToRemove.Add(id);
+                }
+            }
+
+            foreach (var id in idsToRemove)
+            {
+                RemovePlayer(id);
+            }
+        }
+
+        private void OnUpdate()
+        {
+            if (Time.time - _lastCleanupTime > CLEANUP_PERIOD_SEC)
+            {
+                _lastCleanupTime = Time.time;
+                CleanupExpiredPlayers();
+            }
         }
 
         private void OnGetPlayerState((string, Action<PlayerState>) data)
@@ -38,9 +85,14 @@ namespace Synapse.Client.Core.World
             var state = new PlayerState()
             {
                 Id = data.Item1,
-                Position = player.Transform.position.ToVec3(),
+                Position = player.GetPosition().ToVec3(),
             };
             data.Item2.Invoke(state);
+        }
+
+        private void OnNetworkConnectionInitialized(string connectionId)
+        {
+            _localPlayerId = connectionId;
         }
 
         private void OnWorldStateUpdate(WorldState worldState)
@@ -53,19 +105,12 @@ namespace Synapse.Client.Core.World
 
             MonoBehaviourUtil.Instance.RunOnMainThread(() =>
             {
-                var playerIds = new HashSet<string>(_players.Keys);
                 for (var i = 0; i < worldState.Players.Count; ++i)
                 {
                     if (worldState.Players[i] != null)
                     {
-                        playerIds.Remove(worldState.Players[i].Id);
                         OnPlayerStateUpdate(worldState.Players[i]);
                     }
-                }
-
-                foreach (var id in playerIds)
-                {
-                    RemovePlayer(id);
                 }
             });
         }
@@ -85,13 +130,14 @@ namespace Synapse.Client.Core.World
             var targetRot = state.Rotation != null
                 ? Quaternion.Euler(state.Rotation.X, state.Rotation.Y, state.Rotation.Z)
                 : Quaternion.identity;
+
+            if (state.Id != _localPlayerId && !isNew)
+            {
+                targetPos = Vector3.Lerp(player.GetPosition(), targetPos, 10 * Time.deltaTime);
+                targetRot = Quaternion.Lerp(player.GetRotation(), targetRot, 10 * Time.deltaTime);
+            }
             
-            player.Transform.position = isNew
-                ? targetPos
-                : Vector3.Lerp(player.Transform.position, targetPos, 10 * Time.deltaTime);
-            player.Transform.rotation = isNew
-                ? targetRot
-                : Quaternion.Lerp(player.Transform.rotation, targetRot, 10 * Time.deltaTime);
+            player.Update(targetPos, targetRot);
         }
 
         private PlayerController GetOrAddPlayer(string id, out bool isNew)
@@ -113,7 +159,7 @@ namespace Synapse.Client.Core.World
         {
             if (_players.TryGetValue(id, out var p))
             {
-                PoolService.Release(p.Transform.gameObject);
+                PoolService.Release(p.Config.gameObject);
                 _players.Remove(id);
             }
         }

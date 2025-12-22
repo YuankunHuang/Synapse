@@ -109,16 +109,16 @@ namespace Synapse.Client.Core.UI
                 var mbps = kbps / 1024.0f;
                 if (mbps > 1)
                 {
-                    bandwidthStr = $"Bandwidth: {mbps:0.00} MB/s";
+                    bandwidthStr = $"{mbps:0.00} MB/s";
                 }
                 else
                 {
-                    bandwidthStr = $"Bandwidth: {kbps:0.00} KB/s";
+                    bandwidthStr = $"{kbps:0.00} KB/s";
                 }
             }
             else
             {
-                bandwidthStr = $"Bandwidth: {_bytesPerSec:0.00} B/s";
+                bandwidthStr = $"{_bytesPerSec:0.00} B/s";
             }
 
             _uiRoot.StatsTxt.text = $@"

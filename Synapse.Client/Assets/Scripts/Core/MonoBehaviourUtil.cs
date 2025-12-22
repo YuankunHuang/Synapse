@@ -14,6 +14,7 @@ namespace Synapse.Client.Core
         public static event Action OnFixedUpdate;
         
         private Queue<Action> _mainThreadActions = new Queue<Action>();
+        private static readonly object _queueLock = new object();
         
         public MonoBehaviourUtil()
         {
@@ -22,17 +23,36 @@ namespace Synapse.Client.Core
 
         public void RunOnMainThread(Action action)
         {
-            _mainThreadActions.Enqueue(action);
+            lock (_queueLock)
+            {
+                _mainThreadActions.Enqueue(action);    
+            }
         }
 
         private void Update()
         {
             OnUpdate?.Invoke();
-            
-            while (_mainThreadActions.Count > 0)
+
+            if (_mainThreadActions.Count > 0)
             {
-                var act = _mainThreadActions.Dequeue();
-                act?.Invoke();
+                Action[] actionsToRun = null;
+                lock (_queueLock)
+                {
+                    if (_mainThreadActions.Count > 0)
+                    {
+                        actionsToRun = _mainThreadActions.ToArray();
+                        _mainThreadActions.Clear();
+                    }
+                }    
+                
+                // run outside of lock block to avoid dead lock
+                if (actionsToRun != null)
+                {
+                    foreach (var act in actionsToRun)
+                    {
+                        act?.Invoke();
+                    }
+                }
             }
         }
 
