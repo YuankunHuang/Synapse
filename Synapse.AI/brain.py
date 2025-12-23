@@ -1,5 +1,4 @@
 import logging
-import sys
 import time
 import math
 import random
@@ -49,7 +48,7 @@ class BotManager:
     def connect(self):
         self.conn = HubConnectionBuilder()\
             .with_url(server_url)\
-            .configure_logging(logging.DEBUG)\
+            .configure_logging(logging.ERROR)\
             .with_automatic_reconnect({
                 "type": "raw",
                 "keep_alive_interval": 10,

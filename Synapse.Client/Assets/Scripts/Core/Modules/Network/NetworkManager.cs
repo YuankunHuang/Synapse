@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Threading;
 using Google.Protobuf;
 using Microsoft.AspNetCore.SignalR.Client;
 using UnityEngine;
@@ -22,6 +24,9 @@ namespace Synapse.Client.Core.Network
         private PlayerState _cachedLocalState;
         
         private HubConnection _connection;
+        private int _isJobScheduled = 0;
+        private WorldState _latestWorldState;
+        private int _hasLatestWorldState;
 
         private string _serverUrl = "http://localhost:5241/gamehub";
 
@@ -38,32 +43,21 @@ namespace Synapse.Client.Core.Network
             // 2. listen to server
             _connection.On<byte[]>("ReceiveWorldState", data =>
             {
+                // immediately count (as bandwidth is already consumed no matter what)
+                Interlocked.Add(ref _bytesReceivedThisSec, data.Length);
+                
                 try
                 {
                     var worldState = WorldState.Parser.ParseFrom(data);
 
-                    // Time can only be accessed from main thread
-                    MonoBehaviourUtil.Instance.RunOnMainThread(() =>
+                    _latestWorldState = worldState;
+                    Volatile.Write(ref _hasLatestWorldState, 1);
+
+                    if (Interlocked.CompareExchange(ref _isJobScheduled, 1, 0) == 0)
                     {
-                        // stats
-                        // 1. bytes per sec
-                        _bytesReceivedThisSec += data.Length;
-                        if (Time.time - _lastByteCheckTime >= 1f)
-                        {
-                            _bytesPerSec = _bytesReceivedThisSec;
-                            _bytesReceivedThisSec = 0;
-                            _lastByteCheckTime = Time.time;
-                            EventBus.Publish(EventKeys.NetworkBandwidthUpdated, _bytesPerSec);
-                        }
-
-                        // 2. ping
-                        var lag = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - worldState.ServerTime;
-                        _lastPing = lag > 0 ? lag : 0;
-                        EventBus.Publish(EventKeys.NetworkPingUpdated, _lastPing);
-                    });
-
-                    EventBus.Publish(EventKeys.WorldStateUpdate, worldState);
-                    // Debug.Log($"[SignalR] ReceiveWorldState. ServerTime: {worldState.ServerTime} | PlayerCount: {worldState.Players.Count}");
+                        // Time can only be accessed from main thread
+                        MonoBehaviourUtil.Instance.RunOnMainThread(ProcessLatestWorldState);
+                    }
                 }
                 catch (Exception e)
                 {
@@ -98,8 +92,34 @@ namespace Synapse.Client.Core.Network
             }
         }
 
+        private void ProcessLatestWorldState()
+        {
+            Interlocked.Exchange(ref _isJobScheduled, 0);
+            if (Volatile.Read(ref _hasLatestWorldState) == 1)
+            {
+                Volatile.Write(ref _hasLatestWorldState, 0);
+                
+                EventBus.Publish(EventKeys.WorldStateUpdate, _latestWorldState);
+                        
+                // ping
+                var lag = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - _latestWorldState.ServerTime;
+                _lastPing = lag > 0 ? lag : 0;
+                EventBus.Publish(EventKeys.NetworkPingUpdated, _lastPing);
+            }
+        }
+
         private void OnUpdate()
         {
+            // bandwidth -> processed apart from other stats
+            if (Time.time - _lastByteCheckTime >= 1)
+            {
+                var totalBytes = Interlocked.Exchange(ref _bytesReceivedThisSec, 0);
+                _bytesPerSec = totalBytes;
+                _lastByteCheckTime = Time.time;
+                
+                EventBus.Publish(EventKeys.NetworkBandwidthUpdated, _bytesPerSec);
+            }
+            
             // monitor initialization state
             if (!_isConnectionInitialized)
             {

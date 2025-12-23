@@ -19,11 +19,13 @@ namespace Synapse.Client.Core.World
         private const float PLAYER_TTL_SEC = .5f;
         private const float CLEANUP_PERIOD_SEC = 1f;
         private float _lastCleanupTime;
+        private List<string> _idsToRemove;
 
         public WorldManager(WorldRoot worldRoot)
         {
             _worldRoot = worldRoot;
             _players = new Dictionary<string, PlayerController>();
+            _idsToRemove = new List<string>();
         }
 
         public void Init()
@@ -48,7 +50,6 @@ namespace Synapse.Client.Core.World
         
         private void CleanupExpiredPlayers()
         {
-            var idsToRemove = new List<string>();
             foreach (var kv in _players)
             {
                 var id = kv.Key;
@@ -60,14 +61,16 @@ namespace Synapse.Client.Core.World
                 var player = kv.Value;
                 if (Time.time - player.LastUpdateTime > PLAYER_TTL_SEC)
                 {
-                    idsToRemove.Add(id);
+                    _idsToRemove.Add(id);
                 }
             }
 
-            foreach (var id in idsToRemove)
+            foreach (var id in _idsToRemove)
             {
                 RemovePlayer(id);
             }
+
+            _idsToRemove.Clear();
         }
 
         private void OnUpdate()
@@ -103,16 +106,18 @@ namespace Synapse.Client.Core.World
                 return;
             }
 
-            MonoBehaviourUtil.Instance.RunOnMainThread(() =>
+            MonoBehaviourUtil.Instance.RunOnMainThread(HandleWorldStateUpdate, worldState);
+        }
+
+        private void HandleWorldStateUpdate(WorldState worldState)
+        {
+            for (var i = 0; i < worldState.Players.Count; ++i)
             {
-                for (var i = 0; i < worldState.Players.Count; ++i)
+                if (worldState.Players[i] != null)
                 {
-                    if (worldState.Players[i] != null)
-                    {
-                        OnPlayerStateUpdate(worldState.Players[i]);
-                    }
+                    OnPlayerStateUpdate(worldState.Players[i]);
                 }
-            });
+            }
         }
 
         public void OnPlayerStateUpdate(PlayerState state)

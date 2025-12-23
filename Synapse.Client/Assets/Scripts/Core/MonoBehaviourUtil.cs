@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -12,9 +13,87 @@ namespace Synapse.Client.Core
         public static event Action OnUpdate;
         public static event Action OnLateUpdate;
         public static event Action OnFixedUpdate;
+
+        #region Context Action
+        private List<IMainThreadAction> _pendingActions = new List<IMainThreadAction>();
+        private List<IMainThreadAction> _runningActions = new List<IMainThreadAction>();
+        private readonly object _mainThreadActionLock = new object();
         
-        private Queue<Action> _mainThreadActions = new Queue<Action>();
-        private static readonly object _queueLock = new object();
+        private interface IMainThreadAction
+        {
+            void Execute();
+            void ReturnToPool();
+        }
+
+        private class ContextAction : IMainThreadAction
+        {
+            public Action Action;
+            
+            private static readonly Stack<ContextAction> _pool = new Stack<ContextAction>();
+
+            public static ContextAction Get(Action action)
+            {
+                ContextAction item;
+                lock (_pool)
+                {
+                    item =  _pool.Count > 0 ? _pool.Pop() : new ContextAction();
+                }
+                item.Action = action;
+                return item;
+            }
+            
+            public void Execute()
+            {
+                Action?.Invoke();
+            }
+
+            public void ReturnToPool()
+            {
+                Action = null;
+                lock (_pool)
+                {
+                    _pool.Push(this);
+                }
+            }
+        }
+
+        private class ContextAction<T> : IMainThreadAction
+        {
+            private Action<T> Action;
+            private T State;
+            
+            private static readonly Stack<ContextAction<T>> _pool = new Stack<ContextAction<T>>();
+
+            public static ContextAction<T> Get(Action<T> action, T state)
+            {
+                ContextAction<T> item;
+                lock (_pool)
+                {
+                    item =  _pool.Count > 0 ? _pool.Pop() : new ContextAction<T>();
+                }
+
+                item.Action = action;
+                item.State = state;
+                return item;
+            }
+
+            public void Execute()
+            {
+                Action?.Invoke(State);
+            }
+
+            public void ReturnToPool()
+            {
+                Action = null;
+                State = default;
+                lock (_pool)
+                {
+                    _pool.Push(this);
+                }
+            }
+        }
+        
+        #endregion
         
         public MonoBehaviourUtil()
         {
@@ -23,9 +102,19 @@ namespace Synapse.Client.Core
 
         public void RunOnMainThread(Action action)
         {
-            lock (_queueLock)
+            var contextAction = ContextAction.Get(action);
+            lock (_mainThreadActionLock)
             {
-                _mainThreadActions.Enqueue(action);    
+                _pendingActions.Add(contextAction);
+            }
+        }
+
+        public void RunOnMainThread<T>(Action<T> action, T state)
+        {
+            var contextAction = ContextAction<T>.Get(action, state);
+            lock (_mainThreadActionLock)
+            {
+                _pendingActions.Add(contextAction);
             }
         }
 
@@ -33,26 +122,36 @@ namespace Synapse.Client.Core
         {
             OnUpdate?.Invoke();
 
-            if (_mainThreadActions.Count > 0)
+            lock (_mainThreadActionLock)
             {
-                Action[] actionsToRun = null;
-                lock (_queueLock)
+                if (_pendingActions.Count > 0)
                 {
-                    if (_mainThreadActions.Count > 0)
+                    (_pendingActions, _runningActions) = (_runningActions, _pendingActions);
+                    _pendingActions.Clear();
+                }
+            }
+
+            var count = _runningActions.Count;
+            if (count > 0)
+            {
+                for (var i = 0; i < count; ++i)
+                {
+                    var task = _runningActions[i];
+                    try
                     {
-                        actionsToRun = _mainThreadActions.ToArray();
-                        _mainThreadActions.Clear();
+                        task.Execute();
                     }
-                }    
-                
-                // run outside of lock block to avoid dead lock
-                if (actionsToRun != null)
-                {
-                    foreach (var act in actionsToRun)
+                    catch (Exception e)
                     {
-                        act?.Invoke();
+                        Debug.LogException(e);
+                    }
+                    finally
+                    {
+                        task.ReturnToPool();
                     }
                 }
+                
+                _runningActions.Clear();
             }
         }
 
